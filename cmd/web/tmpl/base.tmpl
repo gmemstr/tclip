@@ -12,7 +12,7 @@
         <main>
             <nav>
                 <a href="/">tclip</a>{{if .UserInfo}} - <a href="/paste/list">List</a> - <a href="/help">Help</a>{{end}}
-                {{if .UserInfo}}<div class="right">{{.UserInfo.DisplayName}} <img style="width:32px;height:32px" src="{{.UserInfo.ProfilePicURL}}" /></div>{{end}}
+                {{if .UserInfo}}<div class="right">{{.UserInfo.DisplayName}} {{if .UserInfo.ProfilePicURL}}<img style="width:32px;height:32px" src="{{.UserInfo.ProfilePicURL}}" />{{end}}</div>{{end}}
             </nav>
 
             <h1>{{.Title}}</h1>
