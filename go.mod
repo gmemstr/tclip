@@ -3,9 +3,10 @@ module github.com/tailscale-dev/tclip
 go 1.19
 
 require (
-	github.com/go-enry/go-enry/v2 v2.8.3
+	github.com/go-enry/go-enry/v2 v2.8.4
 	github.com/google/uuid v1.3.0
 	github.com/microcosm-cc/bluemonday v1.0.22
+	github.com/niklasfasching/go-org v1.7.0
 	github.com/russross/blackfriday v1.6.0
 	github.com/tailscale/sqlite v0.0.0-20221025150348-0716cf4a392b
 	tailscale.com v1.1.1-0.20230317050105-82e067e0ffaa
@@ -75,7 +76,6 @@ require (
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect
 	golang.org/x/tools v0.4.1-0.20221208213631-3f74d914ae6d // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	golang.zx2c4.com/wireguard v0.0.0-20220920152132-bb719d3a6e2c // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	gvisor.dev/gvisor v0.0.0-20221203005347-703fd9b7fbc0 // indirect
 	inet.af/peercred v0.0.0-20210906144145-0893ea02156a // indirect
