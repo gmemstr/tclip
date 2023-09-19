@@ -22,7 +22,8 @@ jobs:
       with:
         extra_nix_config: "experimental-features = nix-command flakes"
         nix_path: nixpkgs=channel:nixos-23.05
-
+    - name: Remove access_tokens
+      run: sed -i '/^access-tokens/d' /etc/nix/nix.conf
     - name: "Basic CLI and web build"
       run: |
         nix build .#tclip .#web
@@ -67,7 +68,8 @@ jobs:
       with:
         extra_nix_config: "experimental-features = nix-command flakes"
         nix_path: nixpkgs=channel:nixos-23.05
-
+    - name: Remove access_tokens
+      run: sed -i '/^access-tokens/d' /etc/nix/nix.conf
     - name: "Basic CLI and web build"
       run: |
         nix build .#tclip .#web
