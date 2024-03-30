@@ -4,15 +4,9 @@
   inputs = {
     nixpkgs.url = "nixpkgs/nixos-unstable";
     utils.url = "github:numtide/flake-utils";
-
-    gomod2nix = {
-      url = "github:tweag/gomod2nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "utils";
-    };
   };
 
-  outputs = { self, nixpkgs, utils, gomod2nix }:
+  outputs = { self, nixpkgs, utils }:
     utils.lib.eachSystem [
       "x86_64-linux"
       "aarch64-linux"
@@ -20,35 +14,24 @@
       "aarch64-darwin"
     ] (system:
       let
-      graft = pkgs: pkg: pkg.override {
-        buildGoModule = pkgs.buildGo121Module;
-      };
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [ gomod2nix.overlays.default (final: prev: {
-            go = prev.go_1_21;
-            go-tools = graft prev prev.go-tools;
-            gotools = graft prev prev.gotools;
-            gopls = graft prev prev.gopls;
-          }) ];
-        };
         version = builtins.substring 0 8 self.lastModifiedDate;
+        pkgs = import nixpkgs { inherit system; };
       in {
         packages = rec {
-          tclipd = pkgs.buildGoApplication {
+          tclipd = pkgs.buildGo122Module {
             pname = "tclipd";
             version = "0.1.0-${version}";
-            go = pkgs.go_1_21;
+            go = pkgs.go;
             src = ./.;
             subPackages = "cmd/tclipd";
-            modules = ./gomod2nix.toml;
+            vendorHash = "sha256-7iOEp0NrcmvBNrxl5kjrJOAhVfKYPNpI4ssNxaf6g3M=";
           };
 
-          tclip = pkgs.buildGoApplication {
+          tclip = pkgs.buildGo122Module {
             pname = "tclip";
-            inherit (tclipd) src version modules;
+            inherit (tclipd) src version vendorHash;
             subPackages = "cmd/tclip";
-            go = pkgs.go_1_21;
+            go = pkgs.go;
 
             CGO_ENABLED = "0";
           };
@@ -90,7 +73,6 @@
             gopls
             gotools
             go-tools
-            gomod2nix.packages.${system}.default
             sqlite-interactive
 
             yarn
