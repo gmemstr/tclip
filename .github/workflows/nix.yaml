@@ -5,101 +5,40 @@ on:
     branches:
       - main
 jobs:
-  build-docker:
-    runs-on: debian-latest
+  tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
     - uses: actions/checkout@v3
-    - name: "Install prerequisites"
-      run: |
-        apt update
-        apt install -y sudo zstd
-    - name: "Cache Nix store"
-      uses: actions/cache@v3.0.8
-      id: nix-cache
+    - uses: cachix/install-nix-action@v18
       with:
-        path: /nix
-        key: "tclip-cache-v1"
-
-    - name: Install Nix
-      uses: https://github.com/cachix/install-nix-action@v22
-      with:
-        extra_nix_config: "experimental-features = nix-command flakes"
-        nix_path: nixpkgs=channel:nixos-23.05
-    - name: Remove access_tokens
-      run: sed -i '/^access-tokens/d' /etc/nix/nix.conf
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
     - name: "Basic CLI and web build"
       run: |
-        nix build .#tclip .#tclipd      
-
+        nix build .#tclip .#tclipd
     - name: "Docker image build"
       run: |
-        nix build .#docker        
-
-    - name: Push image with Skopeo
+        nix build .#docker
+        docker load < ./result
+    - name: "docker login"
+      uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # v2.1.0
+      if: "github.event_name == 'push' && github.ref_name == 'main'"
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: "Docker image push"
+      if: "github.event_name == 'push' && github.ref_name == 'main'"
       run: |
-        nix-env -i skopeo -f '<nixpkgs>'
-        wget https://raw.githubusercontent.com/containers/skopeo/main/default-policy.json && mkdir /etc/containers && mv default-policy.json /etc/containers/policy.json
-        skopeo login --username arch --password $REGISTRY_TOKEN git.gmem.ca
-        skopeo copy docker-archive:result docker://git.gmem.ca/arch/tclip:latest        
-      env:
-        REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
-
+        docker push ghcr.io/gmemstr//tclip:latest
     - name: "Portable service build"
       run: |
         nix build .#portable-service
         mkdir -p var
-        cp ./result/*.raw ./var        
-    - uses: https://github.com/actions/upload-artifact@v3
+        cp ./result/*.raw ./var
+    - uses: actions/upload-artifact@v3
       with:
         name: portable-service
         path: ./var/*.raw
-
-  build-docker-arm:
-    runs-on: debian-latest-arm
-    steps:
-    - uses: actions/checkout@v3
-    - name: "Install prerequisites"
-      run: |
-        apt update
-        apt install -y sudo zstd
-    - name: "Cache Nix store"
-      uses: actions/cache@v3.0.8
-      id: nix-cache
-      with:
-        path: /nix
-        key: "tclip-cache-v1"
-
-    - name: Install Nix
-      uses: https://github.com/cachix/install-nix-action@v22
-      with:
-        extra_nix_config: "experimental-features = nix-command flakes"
-        nix_path: nixpkgs=channel:nixos-23.05
-    - name: Remove access_tokens
-      run: sed -i '/^access-tokens/d' /etc/nix/nix.conf
-    - name: "Basic CLI and web build"
-      run: |
-        nix build .#tclip .#tclipd   
-
-    - name: "Docker image build"
-      run: |
-        nix build .#docker        
-
-    - name: Push image with Skopeo
-      run: |
-        nix-env -i skopeo -f '<nixpkgs>'
-        wget https://raw.githubusercontent.com/containers/skopeo/main/default-policy.json && mkdir /etc/containers && mv default-policy.json /etc/containers/policy.json
-        skopeo login --username arch --password $REGISTRY_TOKEN git.gmem.ca
-        skopeo copy docker-archive:result docker://git.gmem.ca/arch/tclip:arm                  
-      env:
-        REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
-
-    - name: "Portable service build"
-      run: |
-        nix build .#portable-service
-        mkdir -p var
-        cp ./result/*.raw ./var        
-    - uses: https://github.com/actions/upload-artifact@v3
-      with:
-        name: portable-service
-        path: ./var/*.raw
-      
