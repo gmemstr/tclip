@@ -1,28 +1,5 @@
 {
   "nodes": {
-    "gomod2nix": {
-      "inputs": {
-        "flake-utils": [
-          "utils"
-        ],
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1710154385,
-        "narHash": "sha256-4c3zQ2YY4BZOufaBJB4v9VBBeN2dH7iVdoJw8SDNCfI=",
-        "owner": "tweag",
-        "repo": "gomod2nix",
-        "rev": "872b63ddd28f318489c929d25f1f0a3c6039c971",
-        "type": "github"
-      },
-      "original": {
-        "owner": "tweag",
-        "repo": "gomod2nix",
-        "type": "github"
-      }
-    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1711703276,
@@ -40,7 +17,6 @@
     },
     "root": {
       "inputs": {
-        "gomod2nix": "gomod2nix",
         "nixpkgs": "nixpkgs",
         "utils": "utils"
       }
