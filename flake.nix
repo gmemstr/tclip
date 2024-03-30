@@ -37,7 +37,7 @@
           };
 
           docker = pkgs.dockerTools.buildLayeredImage {
-            name = "ghcr.io/tailscale-dev/tclip";
+            name = "ghcr.io/gmemstr/tclip";
             tag = "latest";
             config.Cmd = [ "${tclipd}/bin/tclipd" ];
             contents = [ pkgs.cacert ];
