@@ -7,6 +7,7 @@ toolchain go1.22.1
 require (
 	github.com/go-enry/go-enry/v2 v2.8.7
 	github.com/google/uuid v1.5.0
+	github.com/lib/pq v1.10.9
 	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/niklasfasching/go-org v1.7.0
 	github.com/russross/blackfriday v1.6.0

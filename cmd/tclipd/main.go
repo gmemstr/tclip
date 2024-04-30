@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-enry/go-enry/v2"
 	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/niklasfasching/go-org/org"
 	"github.com/russross/blackfriday"
@@ -35,11 +36,12 @@ import (
 )
 
 var (
-	hostname        = flag.String("hostname", envOr("TSNET_HOSTNAME", "paste"), "hostname to use on your tailnet, TSNET_HOSTNAME in the environment")
-	dataDir         = flag.String("data-location", dataLocation(), "where data is stored, defaults to DATA_DIR or ~/.config/tailscale/paste")
-	tsnetLogVerbose = flag.Bool("tsnet-verbose", hasEnv("TSNET_VERBOSE"), "if set, have tsnet log verbosely to standard error")
-	useFunnel       = flag.Bool("use-funnel", hasEnv("USE_FUNNEL"), "if set, expose individual pastes to the public internet with Funnel, USE_FUNNEL in the environment")
-	hidePasteUserInfo       = flag.Bool("hide-funnel-users", hasEnv("HIDE_FUNNEL_USERS"), "if set, display the username and profile picture of the user who created the paste in funneled pastes")
+	hostname          = flag.String("hostname", envOr("TSNET_HOSTNAME", "paste"), "hostname to use on your tailnet, TSNET_HOSTNAME in the environment")
+	dataDir           = flag.String("data-location", dataLocation(), "where data is stored, defaults to DATA_DIR or ~/.config/tailscale/paste")
+	tsnetLogVerbose   = flag.Bool("tsnet-verbose", hasEnv("TSNET_VERBOSE"), "if set, have tsnet log verbosely to standard error")
+	useFunnel         = flag.Bool("use-funnel", hasEnv("USE_FUNNEL"), "if set, expose individual pastes to the public internet with Funnel, USE_FUNNEL in the environment")
+	hidePasteUserInfo = flag.Bool("hide-funnel-users", hasEnv("HIDE_FUNNEL_USERS"), "if set, display the username and profile picture of the user who created the paste in funneled pastes")
+	databaseUrl       = flag.String("database-url", envOr("DATABASE_URL", ""), "optional database url if you'd rather use Postgres instead of sqlite")
 
 	//go:embed schema.sql
 	sqlSchema string
@@ -105,7 +107,7 @@ SELECT p.id
 FROM pastes p
 INNER JOIN users u
   ON p.user_id = u.id
-ORDER BY p.rowid DESC
+ORDER BY p.created_at DESC
 LIMIT 5
 `
 
@@ -239,11 +241,11 @@ INSERT INTO pastes
     , data
     )
 VALUES
-    ( ?1
-    , ?2
-    , ?3
-    , ?4
-    , ?5
+    ( $1
+    , $2
+    , $3
+    , $4
+    , $5
     )`
 
 	_, err = s.db.ExecContext(
@@ -296,9 +298,9 @@ SELECT p.id
 FROM pastes p
 INNER JOIN users u
   ON p.user_id = u.id
-ORDER BY p.rowid DESC
+ORDER BY p.created_at DESC
 LIMIT 25
-OFFSET ?1
+OFFSET $1
 `
 
 	uq := r.URL.Query()
@@ -434,7 +436,7 @@ func (s *Server) TailnetDeletePost(w http.ResponseWriter, r *http.Request) {
 	q := `
 SELECT p.user_id
 FROM pastes p
-WHERE p.id = ?1`
+WHERE p.id = $1`
 
 	row := s.db.QueryRowContext(r.Context(), q, id)
 	var userIDOfPaste int64
@@ -450,7 +452,7 @@ WHERE p.id = ?1`
 
 	q = `
 DELETE FROM pastes
-WHERE id = ?1 AND user_id = ?2
+WHERE id = $1 AND user_id = $2
 `
 
 	if _, err := s.db.ExecContext(r.Context(), q, id, ui.UserProfile.ID); err != nil {
@@ -502,7 +504,7 @@ SELECT p.filename
 FROM pastes p
 INNER JOIN users u
   ON p.user_id = u.id
-WHERE p.id = ?1`
+WHERE p.id = $1`
 
 	row := s.db.QueryRowContext(r.Context(), q, id)
 	var fname, data, userLoginName, userDisplayName, userProfilePicURL string
@@ -684,7 +686,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db, err := openDB(*dataDir)
+	db, err := openDB(*dataDir, *databaseUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -822,8 +824,15 @@ func (mch MixedCriticalityHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	panic("unknown security level")
 }
 
-func openDB(dir string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, "data.db"))
+func openDB(dir string, databaseUrl string) (*sql.DB, error) {
+	dbtype := "sqlite"
+	dbpath := "file:" + filepath.Join(dir, "data.db")
+	if databaseUrl != "" {
+		dbtype = "postgres"
+		dbpath = databaseUrl
+	}
+
+	db, err := sql.Open(dbtype, dbpath)
 	if err != nil {
 		return nil, err
 	}
@@ -831,6 +840,14 @@ func openDB(dir string) (*sql.DB, error) {
 	err = db.Ping()
 	if err != nil {
 		return nil, err
+	}
+
+	// Enable WAL for SQLite + Litestream
+	if dbtype == "sqlite" {
+		_, err := db.Exec("PRAGMA journal_mode=WAL;")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if _, err := db.Exec(sqlSchema); err != nil {
@@ -866,16 +883,16 @@ INSERT INTO users
     , profile_pic_url
     )
 VALUES
-    ( ?1
-    , ?2
-    , ?3
-    , ?4
+    ( $1
+    , $2
+    , $3
+    , $4
     )
-ON CONFLICT DO
+ON CONFLICT (id) DO
   UPDATE SET
-      login_name =      ?2
-    , display_name =    ?3
-    , profile_pic_url = ?4
+      login_name =      $2
+    , display_name =    $3
+    , profile_pic_url = $4
     `
 
 	_, err = db.ExecContext(
