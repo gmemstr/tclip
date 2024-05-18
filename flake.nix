@@ -24,7 +24,7 @@
             go = pkgs.go;
             src = ./.;
             subPackages = "cmd/tclipd";
-            vendorHash = "sha256-Ho39aNWTbygA46/9lkXRVLV6FLkWenAJKxOE3MJUb2M=";
+            vendorHash = "sha256-nxKlKxpr7PZhDLk/J3TBjdhLjy7EYqmMGF+y4hgRgRQ=";
           };
 
           tclip = pkgs.buildGo122Module {

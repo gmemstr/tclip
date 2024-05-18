@@ -26,6 +26,9 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/niklasfasching/go-org/org"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/russross/blackfriday"
 	_ "modernc.org/sqlite"
 	"tailscale.com/client/tailscale"
@@ -43,6 +46,7 @@ var (
 	hidePasteUserInfo = flag.Bool("hide-funnel-users", hasEnv("HIDE_FUNNEL_USERS"), "if set, display the username and profile picture of the user who created the paste in funneled pastes")
 	databaseUrl       = flag.String("database-url", envOr("DATABASE_URL", ""), "optional database url if you'd rather use Postgres instead of sqlite")
 	httpPort          = flag.String("http-port", envOr("HTTP_PORT", ""), "optional http port to start an http server on, e.g for reverse proxies. will only serve funnel endpoints")
+	enableMetrics     = flag.Bool("enable-metrics", hasEnv("ENABLE_METRICS"), "if set, enabled the /metrics endpoint on the tailnet listener")
 
 	//go:embed schema.sql
 	sqlSchema string
@@ -62,6 +66,17 @@ func hasEnv(name string) bool {
 }
 
 const formDataLimit = 64 * 1024 // 64 kilobytes (approx. 32 printed pages of text)
+
+var (
+	totalPastes = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "tclip_total_pastes",
+		Help: "The total number of stored pastes",
+	})
+	pasteViews = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "tclip_paste_views",
+		Help: "Number of times a paste has been viewed",
+	}, []string{"id", "origin"})
+)
 
 func dataLocation() string {
 	if dir, ok := os.LookupEnv("DATA_DIR"); ok {
@@ -264,7 +279,7 @@ VALUES
 	}
 
 	log.Printf("new paste: %s", id)
-
+	totalPastes.Inc()
 	switch r.Header.Get("Accept") {
 	case "text/plain":
 		w.WriteHeader(http.StatusOK)
@@ -460,15 +475,17 @@ WHERE id = $1 AND user_id = $2
 		s.ShowError(w, r, err, http.StatusInternalServerError)
 		return
 	}
-
+	totalPastes.Dec()
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
 func (s *Server) ShowPost(w http.ResponseWriter, r *http.Request) {
 	ui, _ := upsertUserInfo(r.Context(), s.db, s.lc, r.RemoteAddr)
 	var up *tailcfg.UserProfile
+	origin := "public"
 	if ui != nil {
 		up = ui.UserProfile
+		origin = "tailnet"
 	}
 
 	if valAny := r.Context().Value(privacyKey); valAny != nil {
@@ -572,6 +589,9 @@ WHERE p.id = $1`
 
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, data)
+
+			pasteViews.With(prometheus.Labels{"id": id, "origin": origin}).Inc()
+
 			return
 		// download file to disk (plain text view plus download hint)
 		case "dl":
@@ -581,6 +601,8 @@ WHERE p.id = $1`
 
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, data)
+			pasteViews.With(prometheus.Labels{"id": id, "origin": origin}).Inc()
+
 			return
 		case "":
 		// view markdown file with a fancy HTML rendering step
@@ -603,6 +625,7 @@ WHERE p.id = $1`
 					title = ogTitle
 				}
 			}
+			pasteViews.With(prometheus.Labels{"id": id, "origin": origin}).Inc()
 
 			err = s.tmpls.ExecuteTemplate(w, "fancypost.html", struct {
 				Title               string
@@ -634,6 +657,8 @@ WHERE p.id = $1`
 	if up != nil {
 		remoteUserID = up.ID
 	}
+
+	pasteViews.With(prometheus.Labels{"id": id, "origin": origin}).Inc()
 
 	err = s.tmpls.ExecuteTemplate(w, "showpaste.html", struct {
 		UserInfo            *tailcfg.UserProfile
@@ -693,6 +718,16 @@ func main() {
 	}
 	defer db.Close()
 
+	if *enableMetrics {
+		q := `
+SELECT count(*)
+FROM pastes
+`
+		var pastes float64
+		db.QueryRow(q).Scan(&pastes)
+		totalPastes.Set(pastes)
+	}
+
 	lc, err := s.LocalClient()
 	if err != nil {
 		log.Fatal(err)
@@ -735,6 +770,11 @@ func main() {
 	tailnetMux.HandleFunc("/api/delete/", srv.TailnetDeletePost)
 	tailnetMux.HandleFunc("/", srv.TailnetIndex)
 	tailnetMux.HandleFunc("/help", srv.TailnetHelp)
+
+	if *enableMetrics {
+		tailnetMux.Handle("/metrics", promhttp.Handler())
+		log.Printf("metrics enabled on /metrics")
+	}
 
 	funnelMux := http.NewServeMux()
 	funnelMux.Handle("/static/", http.FileServer(http.FS(staticFiles)))
