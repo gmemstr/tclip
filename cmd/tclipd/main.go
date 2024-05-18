@@ -42,6 +42,7 @@ var (
 	useFunnel         = flag.Bool("use-funnel", hasEnv("USE_FUNNEL"), "if set, expose individual pastes to the public internet with Funnel, USE_FUNNEL in the environment")
 	hidePasteUserInfo = flag.Bool("hide-funnel-users", hasEnv("HIDE_FUNNEL_USERS"), "if set, display the username and profile picture of the user who created the paste in funneled pastes")
 	databaseUrl       = flag.String("database-url", envOr("DATABASE_URL", ""), "optional database url if you'd rather use Postgres instead of sqlite")
+	httpPort          = flag.String("http-port", envOr("HTTP_PORT", ""), "optional http port to start an http server on, e.g for reverse proxies. will only serve funnel endpoints")
 
 	//go:embed schema.sql
 	sqlSchema string
@@ -742,6 +743,10 @@ func main() {
 
 	log.Printf("listening on http://%s", *hostname)
 	go func() { log.Fatal(http.Serve(ln, tailnetMux)) }()
+	if *httpPort != "" {
+		log.Printf("listening on :%s", *httpPort)
+		go func() { log.Fatal(http.ListenAndServe(":"+*httpPort, funnelMux)) }()
+	}
 
 	if *useFunnel {
 		log.Println("trying to listen on funnel")
